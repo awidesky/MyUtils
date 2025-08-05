@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
@@ -70,18 +70,29 @@ public class FileHash {
 		out.println();
 		
 		long time = System.currentTimeMillis();
-		HashSet<HashInfo> s = new HashSet<HashInfo>(l1);
+		HashMap<String, HashInfo> s = new HashMap<String, HashInfo>();
+		l1.stream().forEach(h -> s.put(h.hash, h));
 		out.println("Missing entry in " + d1 + " : ");
 		for(HashInfo h : l2) {
-			if(!(ret = s.remove(h))) {
-				out.println("\t" + h);
-				//if(Collections.binarySearch(l1, h) > 0);
+			HashInfo i = s.get(h.hash);
+			if(h.equals(i)) {
+				s.remove(h.hash);
+				continue;
+			}
+			
+			ret = false;
+			if(i == null) {
+				out.println("  Not exist : " + h);
+			} else {
+				out.println("  Hash diff : " + i.hashAndFullPath(d1));
+				out.println("       with : " + h.hashAndFullPath(d2));
+				s.remove(h.hash);
 			}
 		}
 		out.println("======");
 		
 		out.println("Missing entry in " + d2 + " : ");
-		for(HashInfo h : s) {
+		for(HashInfo h : s.values()) {
 			ret = false;
 			out.println("\t" + h);
 		}
@@ -145,12 +156,16 @@ public class FileHash {
 		public String toString() {
 			return relativePath + " : " + hash ;
 		}
+		
+		public String hashAndFullPath(Path dir) {
+			return hash + " : " + dir.resolve(relativePath);
+		}
 	}
 	
 	
 	public static void test() throws Exception {
-		Path d1 = Files.createTempDirectory("1");
-		Path d2 = Files.createTempDirectory("2");
+		//Path d1 = Files.createTempDirectory("1");
+		//Path d2 = Files.createTempDirectory("2");
 		
 		//Files.createTempFile(d2, null, null, null)
 		
