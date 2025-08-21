@@ -53,6 +53,7 @@ public class InvalidEncodingTest extends JFrame {
 
 		inputTextArea.setLineWrap(true);
 		inputTextArea.setWrapStyleWord(true);
+		inputTextArea.setFont(UIManager.getFont("Label.font"));
 		JScrollPane inputScrollPane = new JScrollPane(inputTextArea);
 		inputPanel.add(inputScrollPane, BorderLayout.CENTER);
 
@@ -87,7 +88,7 @@ public class InvalidEncodingTest extends JFrame {
 			textArea.setEditable(false);
 			textArea.setLineWrap(true);
 			textArea.setWrapStyleWord(true);
-			textArea.setFont(UIManager.getFont("굴림"));
+			textArea.setFont(UIManager.getFont("Label.font"));
 
 			JScrollPane scrollPane = new JScrollPane(textArea);
 			tabbedPane.addTab(entry.getKey(), scrollPane);
