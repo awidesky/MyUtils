@@ -28,7 +28,7 @@ import javax.swing.SwingUtilities;
 public class FontTest extends JFrame {
 	private static final long serialVersionUID = 9090152451051763582L;
 	
-	private static final String TEST_STRING = "\uD83C\uDF9E\uD83C\uDFB5"; //🎞🎵
+	private static final String TEST_STRING = "\uD83C\uDF9E\uD83C\uDFB5"; 
 
     public FontTest() {
         setTitle("Font Test");
