@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,19 +29,22 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class FileHash {
 	
 	private PrintWriter out;
+	private static final Normalizer.Form normalizeTo = Normalizer.Form.NFC;
+	private boolean normalizePathname = true;
 	
 	public static void main(String[] args) throws IOException {
 		FileHash fh = new FileHash(new PrintWriter(System.out, true));
 
 		boolean re = fh.compareTwoDirectories(
-				Paths.get("/Users/eugenehong/Documents/인하/3-1"), null,
-				Paths.get("/Users/eugenehong/Documents/인하/3-1"), null
+				Paths.get("C:\\Users\\Eugene\\iCloudDrive\\inha\\3-2"), null,
+				Paths.get("D:\\문서\\인하\\3-2"), null
 				);
 		System.out.println("IsSame : " + re);
 
@@ -51,6 +55,22 @@ public class FileHash {
 		setOut(out);
 	}
 	
+	public FileHash(PrintWriter out, boolean normalizePathname) {
+		setOut(out);
+		this.normalizePathname = normalizePathname;
+	}
+	
+	public boolean isNormalizePathname() {
+		return normalizePathname;
+	}
+
+	/**
+	 * Normalize path name into NFC
+	 * */
+	public void setNormalizePathname(boolean normalizePathname) {
+		this.normalizePathname = normalizePathname;
+	}
+
 	public boolean compareTwoDirectories(Path d1, Consumer<HashInfo> p1, Path d2, Consumer<HashInfo> p2) throws IOException {
 		FutureTask<ArrayList<HashInfo>> f1 = new FutureTask<ArrayList<HashInfo>>(() -> hash(d1, p1));
 		FutureTask<ArrayList<HashInfo>> f2 = new FutureTask<ArrayList<HashInfo>>(() -> hash(d2, p2));
@@ -123,9 +143,13 @@ public class FileHash {
 		return hash(rootdir, null);
 	}
 	public ArrayList<HashInfo> hash(Path rootdir, Consumer<HashInfo> p1) throws IOException {
+		Function<Path, Path> filenameMapper = normalizePathname
+				? p -> Normalizer.isNormalized(p.toString(), normalizeTo) ? p
+						: Paths.get(Normalizer.normalize(p.toString(), normalizeTo))
+				: p -> p;
 		long time = System.currentTimeMillis();
 		Stream<HashInfo> stream = Files.walk(rootdir).parallel()
-				.map(p -> new HashInfo(rootdir.relativize(p), FileHash.hashFile(p)));
+				.map(p -> new HashInfo(filenameMapper.apply(rootdir.relativize(p)), FileHash.hashFile(p)));
 		if(p1 != null) stream = stream.peek(p1::accept);
 		ArrayList<HashInfo> ret = stream.sorted().collect(Collectors.toCollection(ArrayList<HashInfo>::new));
 		time = System.currentTimeMillis() - time;

@@ -20,7 +20,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -31,6 +30,10 @@ import io.github.awidesky.myUtils.hash.FileHash.HashInfo;
 import io.github.awidesky.myUtils.hash.MyJTree.HashTreeNodeObject;
 
 public class MainFrame extends JFrame {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 4748637615270320759L;
 	private final PrintWriter out;
 	private final FileHash hasher;
 	private final JTextArea logArea = new JTextArea();
@@ -58,11 +61,11 @@ public class MainFrame extends JFrame {
 		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
 		this.dir1 = chooser.getSelectedFile().toPath();
-		this.tree1 = new MyJTree(dir1.toFile());
+		this.tree1 = new MyJTree(dir1);
 		
 		if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
 		this.dir2 = chooser.getSelectedFile().toPath();
-		this.tree2 = new MyJTree(dir2.toFile());
+		this.tree2 = new MyJTree(dir2);
 
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setSize(1000, 700);
@@ -77,7 +80,7 @@ public class MainFrame extends JFrame {
 
 		new Thread(() -> {
 			try {
-				boolean same = hasher.compareTwoDirectories(dir1, hashCallback(dir, ), dir2, null);
+				boolean same = hasher.compareTwoDirectories(dir1, null, dir2, null);
 				out.println("IsSame : " + same);
 			} catch (IOException e) {
 				e.printStackTrace(out);
