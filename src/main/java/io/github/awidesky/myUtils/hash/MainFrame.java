@@ -2,6 +2,7 @@ package io.github.awidesky.myUtils.hash;
 
 import java.awt.BorderLayout;
 import java.awt.Desktop;
+import java.awt.Font;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -20,7 +21,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
-import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -58,11 +58,11 @@ public class MainFrame extends JFrame {
 		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
 		this.dir1 = chooser.getSelectedFile().toPath();
-		this.tree1 = new MyJTree(dir1.toFile());
+		this.tree1 = new MyJTree(dir1);
 		
 		if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
 		this.dir2 = chooser.getSelectedFile().toPath();
-		this.tree2 = new MyJTree(dir2.toFile());
+		this.tree2 = new MyJTree(dir2);
 
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setSize(1000, 700);
@@ -77,9 +77,9 @@ public class MainFrame extends JFrame {
 
 		new Thread(() -> {
 			try {
-				boolean same = hasher.compareTwoDirectories(dir1, hashCallback(dir, ), dir2, null);
+				boolean same = false;//hasher.compareTwoDirectories(dir1, hashCallback(dir, ), dir2, null);
 				out.println("IsSame : " + same);
-			} catch (IOException e) {
+			} catch (Exception e) {
 				e.printStackTrace(out);
 			}
 		}).start();
@@ -87,6 +87,7 @@ public class MainFrame extends JFrame {
 
 	private JPanel createLogPanel() {
 		logArea.setEditable(false);
+		logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
 		JScrollPane scroll = new JScrollPane(logArea);
 		JPanel p = new JPanel(new BorderLayout());
 		p.add(scroll, BorderLayout.CENTER);
