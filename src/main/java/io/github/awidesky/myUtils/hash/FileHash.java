@@ -21,19 +21,20 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -41,18 +42,17 @@ public class FileHash {
 	
 	private PrintWriter out;
 	private AtomicLong count = new AtomicLong();
-	private int logInterval = 1000;
+	private int logInterval = 10000;
 	private boolean includeHidden = true;
 	
 	public static void main(String[] args) throws IOException {
 		FileHash fh = new FileHash(new PrintWriter(System.out, true));
 
-		boolean re = fh.compareTwoDirectories(
-				Paths.get("/Users/eugenehong/Downloads/sss/1"), null,
-				Paths.get("/Users/eugenehong/Downloads/sss/2"), null
-				//Paths.get("/Users/eugenehong/Documents/인하/3-1"), null
+		var re = fh.compareTwoDirectories(
+				Paths.get("/Volumes/a"),
+				Paths.get("/Volumes/b")
 				);
-		System.out.println("IsSame : " + re);
+		System.out.println("IsSame : " + re.isSame);
 
 		//SwingUtilities.invokeLater(MainFrame::new);
 	}
@@ -61,84 +61,74 @@ public class FileHash {
 		setOut(out);
 	}
 	
-	public boolean compareTwoDirectories(Path d1, Consumer<HashInfo> p1, Path d2, Consumer<HashInfo> p2) throws IOException {
+	public CompareResult compareTwoDirectories(Path d1, Path d2) throws IOException {
 		long entries = getInfo(d1);
 		getInfo(d2); out.println();
+
+		record HashResult(List<HashInfo> l1, List<HashInfo> l2, List<Path> missingIn1, List<Path> missingIn2) {};
+		HashResult hashResult;
 		
-		FutureTask<ArrayList<HashInfo>> f1 = new FutureTask<ArrayList<HashInfo>>(() -> hash(d1, p1));
-		FutureTask<ArrayList<HashInfo>> f2 = new FutureTask<ArrayList<HashInfo>>(() -> hash(d2, p2));
-		
-		new Thread(f1).start();
-		new Thread(f2).start();
-		
-		ArrayList<HashInfo> l1;
-		ArrayList<HashInfo> l2;
+		FutureTask<HashResult> future = new FutureTask<>(() -> {
+			LinkedList<Path> m1 = new LinkedList<>(), m2 = new LinkedList<>();
+			return new HashResult(hashCommoms(d1, d2, m2), hashCommoms(d2, d1, m1), m1, m2);
+		});
+		new Thread(future).start();
 		
 		Timer timer = new Timer();
 		TimerTask tt = new TimerTask() {
 			@Override
 			public void run() {
+				//TODO : 25%까지는 3초마다 출력하고, 이후에는 10~20%마다 출력
 				out.println(("\t[%s] Hashed %" + ((int)Math.log10(2 * entries) + 1) + "d files so far...")
 						.formatted(new SimpleDateFormat("kk:mm:ss.SSS").format(new Date()), count.getAcquire()));
 			}
 		};
+		timer.schedule(tt, 3000, logInterval);
 		try {
-			timer.schedule(tt, 3000, logInterval);
-			l1 = f1.get();
-			l2 = f2.get();
+			hashResult = future.get();
 		} catch (InterruptedException | ExecutionException e) {
 			e.printStackTrace(out);
-			l1 = hash(d1, p1);
-			l2 = hash(d2, p2);
+			return null;
 		} finally {
 			timer.cancel();
 		}
 		
-		boolean ret = true;
-		
-		if(l1.size() != l2.size()) {
+		if(hashResult.l1.size() != hashResult.l2.size()) { //TODO : delete
 			out.println("Entries number mismatch! (%s : %d entries, %s : %d entries)"
-					.formatted(d1.toString(), l1.size(), d2.toString(), l2.size()));
+					.formatted(d1.toString(), hashResult.l1.size(), d2.toString(), hashResult.l2.size()));
 		}
 		out.println();
-		out.println(l1.size() + " entries(files and directories)");
+		out.println(d1.toString() + " : hashed " + hashResult.l1.size() + " entries(files and directories)");
+		out.println(d2.toString() + " : hashed " + hashResult.l2.size() + " entries(files and directories)");
 		out.println();
 		
 		long time = System.currentTimeMillis();
-		StringBuilder diffs = new StringBuilder(); 
-		HashMap<Path, HashInfo> s = new LinkedHashMap<>();
-		l1.stream().forEach(h -> s.put(h.relativePath, h));
+
 		out.println("Missing entry in " + d1 + " : ");
-		for(HashInfo h : l2) {
-			HashInfo i = s.get(h.relativePath);
-			if(h.equals(i)) {
-				s.remove(h.relativePath);
-				continue;
-			}
-			
-			ret = false;
-			if(i == null) {
-				out.println("  Not exist : " + h); //TODO : find out before hash
-			} else {
-				diffs.append("  Hash diff : " + i.hashAndFullPath(d1)).append('\n'); //TODO : same hash, different name!
-				diffs.append("       with : " + h.hashAndFullPath(d2)).append('\n');
-				s.remove(h.relativePath);
-			}
-		}
+		hashResult.missingIn1.stream().map(p -> "  " + p).forEach(System.out::println);
 		out.println("======\n");
 		
 		out.println("Missing entry in " + d2 + " : ");
-		for(HashInfo h : s.values()) {
-			ret = false;
-			out.println("  Not exist : " + h);
+		hashResult.missingIn2.stream().map(p -> "  " + p).forEach(System.out::println);
+		out.println("======\n");
+
+		HashMap<Path, HashInfo> s = new LinkedHashMap<>();
+		hashResult.l1.stream().forEach(h -> s.put(h.relativePath, h));
+		List<HashInfoPair> hashDiffs = new LinkedList<>();
+		out.println("Hash differences :");
+		for(HashInfo h : hashResult.l2) {
+			HashInfo i = s.get(h.relativePath);
+			if(!h.equals(i)) {
+				hashDiffs.add(new HashInfoPair(i, h));
+				out.println("  Hash diff : " + i.hashAndFullPath(d1)); //TODO : same hash, different name!
+				out.println("       with : " + h.hashAndFullPath(d2));
+			}
 		}
 		out.println("======\n");
-		out.println("Hash differences :");
-		out.println(diffs.toString());
-		out.println("======");
 		out.println("Entry compare : " + (System.currentTimeMillis() - time) + "ms");
 		
-		return ret;
+		return new CompareResult(d1, d2, hashResult.missingIn1, hashResult.missingIn2, hashDiffs,
+				hashResult.missingIn1.isEmpty() && hashResult.missingIn2.isEmpty() && hashDiffs.isEmpty());
 	}
 	
 	
@@ -161,28 +151,37 @@ public class FileHash {
 				files.get(), directories.get(), entries, formatFileSize(size.get()), dir.toString());
 		return entries;
 	}
-
-	public static <T> T findFirstDuplacate(List<T> list) {
-		Set<T> set = new HashSet<T>();
-	    for (T each: list) if (!set.add(each)) return each;
-	    return null;
-	}
 	
-	public ArrayList<HashInfo> hash(Path rootdir) throws IOException {
-		return hash(rootdir, null);
-	}
-	public ArrayList<HashInfo> hash(Path rootdir, Consumer<HashInfo> p1) throws IOException {
+	public ArrayList<HashInfo> hashCommoms(Path rootdir, Path anotherRoot, List<Path> missings) throws IOException {
 		long time = System.currentTimeMillis();
-		Stream<HashInfo> stream = getFileStream(rootdir).parallel()
-				.map(p -> new HashInfo(rootdir.relativize(p), hashFile(p)));
-		if(p1 != null) stream = stream.peek(p1::accept);
-		ArrayList<HashInfo> ret = stream.sorted().collect(Collectors.toCollection(ArrayList<HashInfo>::new));
+		Vector<Path> m = new Vector<>();
+		ArrayList<HashInfo> ret = getFileStream(rootdir).parallel()
+				.filter(p -> {
+					if(!Files.exists(anotherRoot.resolve(rootdir.relativize(p)))) {
+						m.add(p);
+						return false;
+					}
+					else return true;
+				})
+				.map(p -> new HashInfo(rootdir.relativize(p), hashFile(p)))
+		 		.sorted().collect(Collectors.toCollection(ArrayList<HashInfo>::new));
 		time = System.currentTimeMillis() - time;
 		out.printf("Hashing \"%s\" done in %dms\n", rootdir, time);
+
+		missings.addAll(m);
+		missings.sort(Comparator.comparing(Path::toString));
+		Iterator<Path> it = missings.iterator();
+		while(it.hasNext()) {
+			Path p = it.next();
+			if(Files.isDirectory(p)) {
+				while(it.hasNext() && it.next().startsWith(p)) {
+					it.remove();
+				}
+			}
+		}
+		List<Path> relativized = missings.stream().map(rootdir::relativize).toList();
+		missings.clear(); missings.addAll(relativized);
 		
-		HashInfo h = findFirstDuplacate(ret);
-		if(h != null) System.err.println("Warning : duplicate endtry : " + h);
-			
 		return ret;
 	}
 
@@ -206,16 +205,11 @@ public class FileHash {
 	}
 	
 	private Stream<Path> getFileStream(Path dir) throws IOException {
-		Stream<Path> ret = Files.walk(dir);
-		if(!includeHidden) ret = ret.filter(p -> {
-			try {
-				return !Files.isHidden(p);
-			} catch (IOException e) {
-				e.printStackTrace(out);
+		return Files.walk(dir).skip(1).filter(p -> { //TODO : fix, skip in parellel
+			if(!includeHidden && !p.toFile().isHidden())
 				return false;
-			}
+			return true;
 		});
-		return ret;
 	}
 	
 	public void setOut(PrintWriter out) {
@@ -242,7 +236,9 @@ public class FileHash {
 			return dir.resolve(relativePath) + " : " + hash;
 		}
 	}
-	
+	public record HashInfoPair(HashInfo h1, HashInfo h2) {}
+	public record CompareResult(Path dir1, Path dir2, List<Path> missingIn1, List<Path> missingIn2,
+			List<HashInfoPair> hashDiffs, boolean isSame) {}
 	
 	public static void test() throws Exception {
 		//Path d1 = Files.createTempDirectory("1");
