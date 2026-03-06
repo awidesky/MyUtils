@@ -15,12 +15,11 @@ import io.github.awidesky.myUtils.hash.FileHash.HashInfo;
 
 public class MyJTree extends JTree {
 	
+	private static final long serialVersionUID = 8274666144466211316L;
 	private final DefaultMutableTreeNode root;
-	private Path path;
 	
 	public MyJTree(Path path) {
 		this(new DefaultMutableTreeNode(new HashTreeNodeObject(path.getFileName().toString(), path.toFile())));
-		this.path = path;
 	}
 	
 	private MyJTree(DefaultMutableTreeNode root) {
@@ -33,7 +32,45 @@ public class MyJTree extends JTree {
 	}
 	
 	public void hashUpdated(HashInfo h) {
-		
+	    DefaultMutableTreeNode node = findNode(h.relativePath());
+
+	    if (node == null) return;
+
+	    Object o = node.getUserObject();
+
+	    if (o instanceof HashTreeNodeObject no) {
+	        no.hash = h.hash();
+	        getModel().nodeChanged(node);
+	    }
+	}
+	
+	private DefaultMutableTreeNode findNode(Path relPath) {
+	    DefaultMutableTreeNode current = root;
+
+	    for (Path part : relPath) {
+
+	        boolean found = false;
+
+	        for (int i = 0; i < current.getChildCount(); i++) {
+
+	            DefaultMutableTreeNode child =
+	                    (DefaultMutableTreeNode) current.getChildAt(i);
+
+	            Object o = child.getUserObject();
+
+	            if (o instanceof HashTreeNodeObject no &&
+	                no.name.equals(part.toString())) {
+
+	                current = child;
+	                found = true;
+	                break;
+	            }
+	        }
+
+	        if (!found) return null;
+	    }
+
+	    return current;
 	}
 	
 	@Override

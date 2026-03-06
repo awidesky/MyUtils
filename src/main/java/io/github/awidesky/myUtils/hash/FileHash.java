@@ -19,24 +19,28 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
+import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HexFormat;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.Vector;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import javax.swing.SwingUtilities;
 
 public class FileHash {
 	
@@ -44,43 +48,92 @@ public class FileHash {
 	private AtomicLong count = new AtomicLong();
 	private int logInterval = 10000;
 	private boolean includeHidden = true;
+	private static final Normalizer.Form normalizeTo = Normalizer.Form.NFC;
+	private boolean normalizePathname = true;
 	
 	public static void main(String[] args) throws IOException {
 		FileHash fh = new FileHash(new PrintWriter(System.out, true));
 
 		var re = fh.compareTwoDirectories(
-				Paths.get("/Volumes/a"),
-				Paths.get("/Volumes/b")
+				Paths.get("/Users/eugenehong/git/sofre"),
+				Paths.get("/Users/eugenehong/git/sofre")
 				);
 		System.out.println("IsSame : " + re.isSame);
 
-		//SwingUtilities.invokeLater(MainFrame::new);
+		SwingUtilities.invokeLater(MainFrame::new);
 	}
 	
 	public FileHash(PrintWriter out) {
 		setOut(out);
 	}
+
+	public FileHash(PrintWriter out, boolean normalizePathname) {
+		setOut(out);
+		this.normalizePathname = normalizePathname;
+	}
+	
+	public boolean isNormalizePathname() {
+		return normalizePathname;
+	}
+
+	/**
+	 * Normalize path name into NFC
+	 * */
+	public void setNormalizePathname(boolean normalizePathname) {
+		this.normalizePathname = normalizePathname;
+	}
+
 	
 	public CompareResult compareTwoDirectories(Path d1, Path d2) throws IOException {
-		long entries = getInfo(d1);
-		getInfo(d2); out.println();
+		return compareTwoDirectories(d1, null, d2, null);
+	}
+	public CompareResult compareTwoDirectories(
+	        Path d1, Consumer<HashInfo> hashCallback1,
+	        Path d2, Consumer<HashInfo> hashCallback2) throws IOException {
 
-		record HashResult(List<HashInfo> l1, List<HashInfo> l2, List<Path> missingIn1, List<Path> missingIn2) {};
-		HashResult hashResult;
+	    long entries = getInfo(d1);
+	    getInfo(d2); 
+	    out.println();
+	    
+	    Set<Path> list1 = getFileStream(d1)
+	            .map(d1::relativize)
+	            .collect(Collectors.toSet());
+	    Set<Path> list2 = getFileStream(d2)
+	            .map(d2::relativize)
+	            .collect(Collectors.toSet());
+	    
+	    List<Path> missingIn1 = list2.stream()
+	            .filter(p -> !list1.contains(p))
+	            .toList();
+	    List<Path> missingIn2 = list1.stream()
+	            .filter(p -> !list2.contains(p))
+	            .toList();
+	    
+		List<Path> commons = list1.stream().filter(list2::contains).toList();
+
+	    record HashResult(List<HashInfo> l1, List<HashInfo> l2,
+	                      List<Path> missingIn1, List<Path> missingIn2) {}
+
+	    HashResult hashResult;
+
+	    ExecutorService executor = Executors.newSingleThreadExecutor();
+
+	    Future<HashResult> future = executor.submit(() -> {
+
+	        List<HashInfo> l1 = hashFiles(d1, commons, hashCallback1);
+	        List<HashInfo> l2 = hashFiles(d2, commons, hashCallback2);
+
+			return new HashResult(l1, l2, missingIn1, missingIn2);
+	    });
 		
-		FutureTask<HashResult> future = new FutureTask<>(() -> {
-			LinkedList<Path> m1 = new LinkedList<>(), m2 = new LinkedList<>();
-			return new HashResult(hashCommoms(d1, d2, m2), hashCommoms(d2, d1, m1), m1, m2);
-		});
-		new Thread(future).start();
-		
-		Timer timer = new Timer();
+	    count.set(0);
+		Timer timer = new Timer(true);
 		TimerTask tt = new TimerTask() {
 			@Override
 			public void run() {
 				//TODO : 25%까지는 3초마다 출력하고, 이후에는 10~20%마다 출력
 				out.println(("\t[%s] Hashed %" + ((int)Math.log10(2 * entries) + 1) + "d files so far...")
-						.formatted(new SimpleDateFormat("kk:mm:ss.SSS").format(new Date()), count.getAcquire()));
+						.formatted(new SimpleDateFormat("kk:mm:ss.SSS").format(new Date()), count.get()));
 			}
 		};
 		timer.schedule(tt, 3000, logInterval);
@@ -91,6 +144,7 @@ public class FileHash {
 			return null;
 		} finally {
 			timer.cancel();
+			executor.shutdownNow();
 		}
 		
 		if(hashResult.l1.size() != hashResult.l2.size()) { //TODO : delete
@@ -112,7 +166,7 @@ public class FileHash {
 		hashResult.missingIn2.stream().map(p -> "  " + p).forEach(System.out::println);
 		out.println("======\n");
 
-		HashMap<Path, HashInfo> s = new LinkedHashMap<>();
+		HashMap<Path, HashInfo> s = new HashMap<>();
 		hashResult.l1.stream().forEach(h -> s.put(h.relativePath, h));
 		List<HashInfoPair> hashDiffs = new LinkedList<>();
 		out.println("Hash differences :");
@@ -152,44 +206,45 @@ public class FileHash {
 		return entries;
 	}
 	
-	public ArrayList<HashInfo> hashCommoms(Path rootdir, Path anotherRoot, List<Path> missings) throws IOException {
-		long time = System.currentTimeMillis();
-		Vector<Path> m = new Vector<>();
-		ArrayList<HashInfo> ret = getFileStream(rootdir).parallel()
-				.filter(p -> {
-					if(!Files.exists(anotherRoot.resolve(rootdir.relativize(p)))) {
-						m.add(p);
-						return false;
-					}
-					else return true;
-				})
-				.map(p -> new HashInfo(rootdir.relativize(p), hashFile(p)))
-		 		.sorted().collect(Collectors.toCollection(ArrayList<HashInfo>::new));
-		time = System.currentTimeMillis() - time;
-		out.printf("Hashing \"%s\" done in %dms\n", rootdir, time);
-
-		missings.addAll(m);
-		missings.sort(Comparator.comparing(Path::toString));
-		Iterator<Path> it = missings.iterator();
-		while(it.hasNext()) {
-			Path p = it.next();
-			if(Files.isDirectory(p)) {
-				while(it.hasNext() && it.next().startsWith(p)) {
-					it.remove();
-				}
-			}
+	private Path normalizeFilename(Path p) {
+		if(normalizePathname && !Normalizer.isNormalized(p.toString(), normalizeTo)) {
+			return Paths.get(Normalizer.normalize(p.toString(), normalizeTo));
+		} else {
+			return p;
 		}
-		List<Path> relativized = missings.stream().map(rootdir::relativize).toList();
-		missings.clear(); missings.addAll(relativized);
 		
-		return ret;
+	}
+
+	public ArrayList<HashInfo> hashFiles(Path rootdir, Collection<Path> commons, Consumer<HashInfo> callback)
+			throws IOException {
+
+	    long time = System.currentTimeMillis();
+
+	    Stream<HashInfo> stream = commons.parallelStream()
+	            .map(rel -> {
+	                Path full = rootdir.resolve(rel);
+					return new HashInfo(normalizeFilename(rel), hashFile(full));
+				});
+
+	    if(callback != null)
+	        stream = stream.peek(callback);
+
+	    ArrayList<HashInfo> ret = stream
+	            .sorted()
+	            .collect(Collectors.toCollection(ArrayList::new));
+
+	    time = System.currentTimeMillis() - time;
+
+	    out.printf("Hashing \"%s\" done in %dms\n", rootdir, time);
+
+	    return ret;
 	}
 
 	public String hashFile(Path file) {
 		//out.println("Doing : " + file);
 		if(Files.isDirectory(file)) return "*directory";
 		
-		ByteBuffer buf = ByteBuffer.allocateDirect(8*1024);
+		ByteBuffer buf = ByteBuffer.allocateDirect(512 * 1024);
 		try (FileChannel fc = FileChannel.open(file, StandardOpenOption.READ)){
 			MessageDigest md = MessageDigest.getInstance("SHA-256");
 			while(fc.read(buf.clear()) != -1) {
@@ -205,11 +260,7 @@ public class FileHash {
 	}
 	
 	private Stream<Path> getFileStream(Path dir) throws IOException {
-		return Files.walk(dir).skip(1).filter(p -> { //TODO : fix, skip in parellel
-			if(!includeHidden && !p.toFile().isHidden())
-				return false;
-			return true;
-		});
+		return Files.walk(dir).skip(1).filter(p -> includeHidden || !p.toFile().isHidden());
 	}
 	
 	public void setOut(PrintWriter out) {

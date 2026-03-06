@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.List;
+import java.util.function.Consumer;
 
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
@@ -27,10 +27,15 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
+import io.github.awidesky.myUtils.hash.FileHash.CompareResult;
 import io.github.awidesky.myUtils.hash.FileHash.HashInfo;
 import io.github.awidesky.myUtils.hash.MyJTree.HashTreeNodeObject;
 
 public class MainFrame extends JFrame {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 4748637615270320759L;
 	private final PrintWriter out;
 	private final FileHash hasher;
 	private final JTextArea logArea = new JTextArea();
@@ -44,8 +49,9 @@ public class MainFrame extends JFrame {
 		out = new PrintWriter(new Writer() {
 			@Override
 			public void write(char[] cbuf, int off, int len) {
+				String s = new String(cbuf, off, len);
 				SwingUtilities.invokeLater(() -> {
-					logArea.append(new String(cbuf, off, len));
+					logArea.append(s);
 					logArea.setCaretPosition(logArea.getDocument().getLength());
 				});
 			}
@@ -77,14 +83,21 @@ public class MainFrame extends JFrame {
 
 		new Thread(() -> {
 			try {
-				boolean same = false;//hasher.compareTwoDirectories(dir1, hashCallback(dir, ), dir2, null);
-				out.println("IsSame : " + same);
+				CompareResult result = hasher.compareTwoDirectories(dir1, hashCallback(tree1), dir2,
+						hashCallback(tree2));
+				out.println("IsSame : " + result.isSame());
 			} catch (Exception e) {
 				e.printStackTrace(out);
 			}
 		}).start();
 	}
 
+	private Consumer<HashInfo> hashCallback(MyJTree tree) {
+	    return h -> SwingUtilities.invokeLater(() -> {
+	        tree.hashUpdated(h);
+	    });
+	}
+	
 	private JPanel createLogPanel() {
 		logArea.setEditable(false);
 		logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -95,14 +108,23 @@ public class MainFrame extends JFrame {
 	}
 
 	private JPanel createDirPanel(final MyJTree tree, Path dir, int dirIndex) {
-		Arrays.stream(dir.toFile().listFiles()).sorted(Comparator.comparing(File::getName))
-			.forEach(c -> buildTree(tree.getModel(), "", tree.getRoot(), c));
+		try {
+			Files.list(dir).sorted(Comparator.comparing(Path::getFileName)).map(Path::toFile)
+				.forEach(c -> buildTree(tree.getModel(), "", tree.getRoot(), c));
+		} catch (IOException e) {
+			e.printStackTrace();
+			Arrays.stream(dir.toFile().listFiles()).forEach(c -> buildTree(tree.getModel(), "", tree.getRoot(), c));
+		}
 		ToolTipManager.sharedInstance().registerComponent(tree);
 
 		JButton openBtn = new JButton("Show in Explorer");
 		openBtn.addActionListener(ev -> {
 			TreePath path = tree.getSelectionPath();
-			Path p = path == null ? dir : Paths.get(dir.toString(), Arrays.copyOfRange((String[]) path.getPath(), 1, path.getPath().length));
+			Path p = path == null ? dir
+					: Paths.get(dir.toString(),
+							Arrays.copyOfRange(
+									Arrays.stream(path.getPath()).map(Object::toString).toArray(String[]::new), 1,
+									path.getPath().length));
 			try {
 				Desktop.getDesktop().open((Files.isDirectory(p) ? p : p.getParent()).toFile());
 			} catch (IOException e) {
@@ -127,13 +149,6 @@ public class MainFrame extends JFrame {
 			Arrays.stream(file.listFiles()).sorted(Comparator.comparing(File::getName))
 				.forEach(c -> buildTree(treeModel, relativePath + "/", node, c));
 		}
-	}
-
-	private HashInfo findHashInList(HashInfo h, List<HashInfo> list) {
-		for (HashInfo hi : list) {
-			if (hi.relativePath().equals(h.relativePath())) return hi;
-		}
-		return null;
 	}
 
 }
