@@ -31,7 +31,7 @@ import io.github.awidesky.myUtils.hash.FileHash.CompareResult;
 import io.github.awidesky.myUtils.hash.FileHash.HashInfo;
 import io.github.awidesky.myUtils.hash.MyJTree.HashTreeNodeObject;
 
-public class MainFrame extends JFrame {
+public class SwingDirectoryCompare extends JFrame {
 	/**
 	 * 
 	 */
@@ -42,7 +42,7 @@ public class MainFrame extends JFrame {
 	private Path dir1, dir2;
 	private MyJTree tree1, tree2;
 
-	public MainFrame() {
+	public SwingDirectoryCompare() {
 		super("Directory Compare");
 
 		// redirect PrintWriter out -> logArea

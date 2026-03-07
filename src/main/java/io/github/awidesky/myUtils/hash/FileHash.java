@@ -50,19 +50,7 @@ public class FileHash {
 	private boolean includeHidden = true;
 	private static final Normalizer.Form normalizeTo = Normalizer.Form.NFC;
 	private boolean normalizePathname = true;
-	
-	public static void main(String[] args) throws IOException {
-		FileHash fh = new FileHash(new PrintWriter(System.out, true));
 
-		var re = fh.compareTwoDirectories(
-				Paths.get("/Users/eugenehong/git/sofre"),
-				Paths.get("/Users/eugenehong/git/sofre")
-				);
-		System.out.println("IsSame : " + re.isSame);
-
-		SwingUtilities.invokeLater(MainFrame::new);
-	}
-	
 	public FileHash(PrintWriter out) {
 		setOut(out);
 	}

@@ -23,7 +23,6 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.SwingUtilities;
 
 public class FontTest extends JFrame {
 	private static final long serialVersionUID = 9090152451051763582L;
@@ -76,9 +75,5 @@ public class FontTest extends JFrame {
 
         setLocationRelativeTo(null);
         setVisible(true);
-    }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(FontTest::new);
     }
 }

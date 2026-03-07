@@ -6,8 +6,8 @@ import java.util.Scanner;
 import java.util.stream.Stream;
 
 
-public class URLEscape {
-	public static void main(String[] args) {
+public class URLEscaper {
+	public static void run() {
 		System.out.println("URL Escaper v1.0\n>>>");
 		try(Scanner sc = new Scanner(System.in)) {
 			Stream.generate(sc::nextLine)

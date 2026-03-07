@@ -40,10 +40,6 @@ public class InvalidEncodingTest extends JFrame {
 		    "Windows-1252", Charset.forName("windows-1252")
 		));
 
-	public static void main(String[] args) {
-		SwingUtilities.invokeLater(InvalidEncodingTest::new);
-	}
-
 	public InvalidEncodingTest() {
 		setTitle("Encoding Viewer (Encode with combobox, decode with tab name)");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
