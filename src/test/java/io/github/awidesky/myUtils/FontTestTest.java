@@ -7,12 +7,12 @@ import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-class FontTest {
+class FontTestTest {
 
 	@Test
 	@Disabled
 	void test() throws InvocationTargetException, InterruptedException {
-        SwingUtilities.invokeAndWait(FontTest::new);
+        SwingUtilities.invokeAndWait(FontTestTest::new);
 	}
 
 }
