@@ -276,14 +276,7 @@ public class FileHash {
 	public record HashInfoPair(HashInfo h1, HashInfo h2) {}
 	public record CompareResult(Path dir1, Path dir2, List<Path> missingIn1, List<Path> missingIn2,
 			List<HashInfoPair> hashDiffs, boolean isSame) {}
-	
-	public static void test() throws Exception {
-		//Path d1 = Files.createTempDirectory("1");
-		//Path d2 = Files.createTempDirectory("2");
-		
-		//Files.createTempFile(d2, null, null, null)
-		
-	}
+
 	
 	public static String formatFileSize(long length) {
 		
