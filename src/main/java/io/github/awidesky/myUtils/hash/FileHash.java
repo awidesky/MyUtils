@@ -25,9 +25,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -37,6 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -81,21 +84,22 @@ public class FileHash {
 	    getInfo(d2); 
 	    out.println();
 	    
-	    Set<Path> list1 = getFileStream(d1)
-	            .map(d1::relativize)
-	            .collect(Collectors.toSet());
-	    Set<Path> list2 = getFileStream(d2)
-	            .map(d2::relativize)
-	            .collect(Collectors.toSet());
 	    
-	    List<Path> missingIn1 = list2.stream()
-	            .filter(p -> !list1.contains(p))
-	            .toList();
-	    List<Path> missingIn2 = list1.stream()
-	            .filter(p -> !list2.contains(p))
-	            .toList();
-	    
-		List<Path> commons = list1.stream().filter(list2::contains).toList();
+		Map<Path, Path> files1 = getFileStream(d1).map(d1::relativize).collect(Collectors.toMap(this::normalizeFilename, Function.identity()));
+		Map<Path, Path> files2 = getFileStream(d2).map(d2::relativize).collect(Collectors.toMap(this::normalizeFilename, Function.identity()));
+		
+		Set<Path> keys1 = files1.keySet();
+		Set<Path> keys2 = files2.keySet();
+
+		Set<Path> commonKeys = new HashSet<>(keys1); commonKeys.retainAll(keys2);
+		Set<Path> missingKeys1 = new HashSet<>(keys2); missingKeys1.removeAll(keys1);
+		Set<Path> missingKeys2 = new HashSet<>(keys1); missingKeys2.removeAll(keys2);
+
+		List<Path> missingIn1 = missingKeys1.stream().map(files2::get).toList();
+		List<Path> missingIn2 = missingKeys2.stream().map(files1::get).toList();
+
+		List<Path> common1 = commonKeys.stream().map(files1::get).toList();
+		List<Path> common2 = commonKeys.stream().map(files2::get).toList();
 
 	    record HashResult(List<HashInfo> l1, List<HashInfo> l2,
 	                      List<Path> missingIn1, List<Path> missingIn2) {}
@@ -106,8 +110,8 @@ public class FileHash {
 
 	    Future<HashResult> future = executor.submit(() -> {
 
-	        List<HashInfo> l1 = hashFiles(d1, commons, hashCallback1);
-	        List<HashInfo> l2 = hashFiles(d2, commons, hashCallback2);
+	        List<HashInfo> l1 = hashFiles(d1, common1, hashCallback1);
+	        List<HashInfo> l2 = hashFiles(d2, common2, hashCallback2);
 
 			return new HashResult(l1, l2, missingIn1, missingIn2);
 	    });
@@ -173,6 +177,7 @@ public class FileHash {
 	
 	
 	private long getInfo(Path dir) throws IOException {
+		System.out.println("getinfo : dir " + dir);
 		AtomicLong files = new AtomicLong();
 		AtomicLong directories = new AtomicLong();
 		AtomicLong size = new AtomicLong();
