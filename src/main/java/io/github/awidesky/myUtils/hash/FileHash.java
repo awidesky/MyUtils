@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -51,6 +52,17 @@ public class FileHash {
 	private boolean includeHidden = true;
 	private static final Normalizer.Form normalizeTo = Normalizer.Form.NFC;
 	private boolean normalizePathname = true;
+	
+	private static int BUFFSIZE = 512 * 1024;
+	private static final ThreadLocal<ByteBuffer> IOBUFFER = ThreadLocal.withInitial(() -> ByteBuffer.allocateDirect(BUFFSIZE));
+	private static final ThreadLocal<byte[]> HEAPBUFFER = ThreadLocal.withInitial(() -> new byte[BUFFSIZE]);
+	private static final ThreadLocal<MessageDigest> HASH = ThreadLocal.withInitial(() -> {
+		try {
+			return MessageDigest.getInstance("SHA-256");
+		} catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		}
+	});
 
 	public FileHash(PrintWriter out) {
 		setOut(out);
@@ -235,11 +247,16 @@ public class FileHash {
 		//out.println("Doing : " + file);
 		if(Files.isDirectory(file)) return "*directory";
 		
-		ByteBuffer buf = ByteBuffer.allocateDirect(512 * 1024);
+		ByteBuffer buf = IOBUFFER.get().clear();
+		byte[] arr = HEAPBUFFER.get();
 		try (FileChannel fc = FileChannel.open(file, StandardOpenOption.READ)){
-			MessageDigest md = MessageDigest.getInstance("SHA-256");
-			while(fc.read(buf.clear()) != -1) {
-				md.update(buf.flip());
+			MessageDigest md = HASH.get(); md.reset();
+			while (true) {
+			    int n = fc.read(buf.clear());
+			    if (n == -1) break;
+			    
+				buf.flip().get(arr, 0, n);
+				md.update(arr, 0, n);
 			}
 			String ret = HexFormat.of().formatHex(md.digest());
 			count.incrementAndGet();
